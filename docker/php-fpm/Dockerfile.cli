@@ -1,0 +1,26 @@
+FROM php:8.2-cli
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    git \
+    unzip \
+    libzip-dev \
+    libicu-dev \
+    libbrotli1 \
+    libbrotli-dev \
+    pkg-config \
+    libcurl4-openssl-dev \
+    libssl-dev
+
+# Install PHP extensions
+RUN docker-php-ext-install zip intl pcntl
+
+# Install Redis extension
+RUN pecl install redis && docker-php-ext-enable redis
+
+# Configure PHP for CLI
+COPY php.ini /usr/local/etc/php/php.ini
+
+WORKDIR /var/www
+
+CMD ["php", "spark", "monitor:start"]
