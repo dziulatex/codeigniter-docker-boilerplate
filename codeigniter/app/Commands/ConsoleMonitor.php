@@ -38,8 +38,6 @@ class ConsoleMonitor extends BaseCommand
     public function __construct(Logger $logger, Commands $commands)
     {
         parent::__construct($logger, $commands);
-
-        $this->logPath = WRITEPATH . 'logs/coaster_monitor.log';
         $this->problemDetector = new CoasterProblemDetector();
         $this->coasterRepository = new CoasterRepository();
         $this->wagonRepository = new WagonRepository();

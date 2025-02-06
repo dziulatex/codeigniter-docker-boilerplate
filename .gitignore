@@ -1,3 +1,7 @@
 .idea/
-codeigniter/build
-codeigniter/vendor
+/codeigniter/build
+/codeigniter/vendor
+/codeigniter/.composer
+/codeigniter/writable/debugbar/
+/codeigniter/writable/logs/*.log
+/logs/nginx/*

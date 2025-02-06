@@ -10,7 +10,8 @@ RUN apt-get update && apt-get install -y \
     libbrotli-dev \
     pkg-config \
     libcurl4-openssl-dev \
-    libssl-dev
+    libssl-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install PHP extensions
 RUN docker-php-ext-install zip intl pcntl
