@@ -2,11 +2,13 @@
 
 namespace integration\Controllers\Api;
 
+use App\Helper\WaitForPromiseHelper;
 use App\Repository\CoasterRepository;
 use App\Repository\WagonRepository;
 use CodeIgniter\Test\CIUnitTestCase;
 use CodeIgniter\Test\FeatureTestTrait;
 use Config\Services;
+use Ramsey\Uuid\Uuid;
 
 class CoasterControllerTest extends CIUnitTestCase
 {
@@ -19,7 +21,7 @@ class CoasterControllerTest extends CIUnitTestCase
     {
         parent::setUp();
         $redis = Services::redis();
-        Services::waitForPromise($redis->flushDB());
+        WaitForPromiseHelper::wait($redis->flushDB());
 
         $this->coasterRepository = new CoasterRepository();
         $this->wagonRepository = new WagonRepository();
@@ -42,7 +44,7 @@ class CoasterControllerTest extends CIUnitTestCase
         $response = json_decode($result->getJSON(), true);
         $coasterId = $response['id'];
 
-        $storedCoaster = Services::waitForPromise(
+        $storedCoaster = WaitForPromiseHelper::wait(
             $this->coasterRepository->findById($coasterId)
         );
         static::assertNotNull($storedCoaster);
@@ -81,7 +83,7 @@ class CoasterControllerTest extends CIUnitTestCase
 
         $result->assertStatus(200);
 
-        $storedCoaster = Services::waitForPromise(
+        $storedCoaster = WaitForPromiseHelper::wait(
             $this->coasterRepository->findById($coasterId)
         );
 
@@ -118,8 +120,8 @@ class CoasterControllerTest extends CIUnitTestCase
         $response = json_decode($result->getJSON(), true);
         $wagonId = $response['id'];
 
-        $storedWagon = Services::waitForPromise(
-            $this->wagonRepository->findById($wagonId)
+        $storedWagon = WaitForPromiseHelper::wait(
+            $this->wagonRepository->findById(Uuid::fromString($wagonId))
         );
 
         static::assertNotNull($storedWagon);
@@ -156,13 +158,13 @@ class CoasterControllerTest extends CIUnitTestCase
         $result = $this->delete("api/coasters/$coasterId/wagons/$wagonId");
         $result->assertStatus(200);
 
-        $deletedWagon = Services::waitForPromise(
-            $this->wagonRepository->findById($wagonId)
+        $deletedWagon = WaitForPromiseHelper::wait(
+            $this->wagonRepository->findById(Uuid::fromString($wagonId))
         );
         static::assertNull($deletedWagon);
 
-        $coasterWagons = Services::waitForPromise(
-            $this->wagonRepository->getWagonsByCoaster($coasterId)
+        $coasterWagons = WaitForPromiseHelper::wait(
+            $this->wagonRepository->getWagonsByCoaster(Uuid::fromString($coasterId))
         );
         static::assertEmpty($coasterWagons);
     }

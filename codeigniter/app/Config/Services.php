@@ -2,14 +2,26 @@
 
 namespace Config;
 
+use App\Command\AddWagonCommand;
+use App\Command\CreateCoasterCommand;
+use App\Command\RemoveWagonCommand;
+use App\Command\UpdateCoasterCommand;
+use App\CommandHandler\AddWagonHandler;
+use App\CommandHandler\CreateCoasterHandler;
+use App\CommandHandler\RemoveWagonHandler;
+use App\CommandHandler\UpdateCoasterHandler;
+use App\Repository\CoasterRepository;
+use App\Repository\WagonRepository;
+use App\Service\CoasterProblemDetector;
+use App\Validator\CoasterValidator;
+use App\Validator\WagonValidator;
 use Clue\React\Redis\RedisClient;
 use CodeIgniter\Config\BaseService;
-use Exception;
-use LogicException;
-use React\EventLoop\Loop;
-use React\Promise\PromiseInterface;
 use RedisException;
-use Throwable;
+use Symfony\Component\Messenger\Handler\HandlerDescriptor;
+use Symfony\Component\Messenger\Handler\HandlersLocator;
+use Symfony\Component\Messenger\MessageBus;
+use Symfony\Component\Messenger\Middleware\HandleMessageMiddleware;
 
 /**
  * Services Configuration file.
@@ -26,12 +38,9 @@ use Throwable;
  */
 class Services extends BaseService
 {
-    public static function redis($getShared = true)
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function redis()
     {
-        if ($getShared) {
-            return static::getSharedInstance('redis');
-        }
-
         /** @var Redis $config */
         $config = config('Redis');
 
@@ -44,55 +53,84 @@ class Services extends BaseService
         }
     }
 
-    public static function redisXd($getShared = true)
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function addWagonHandler()
     {
-        if ($getShared) {
-            return static::getSharedInstance('redis');
-        }
-
-        /** @var Redis $config */
-        $config = config('Redis');
-
-
-        try {
-            return new RedisClient($config->host);
-        } catch (RedisException $e) {
-            log_message('error', 'Redis connection failed: ' . $e->getMessage());
-            throw $e;
-        }
+        return new AddWagonHandler();
     }
 
-    public static function waitForPromise(PromiseInterface $promise)
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function createCoasterHandler()
     {
-        $loop = Loop::get();
-        $resolved = false;
-        $result = null;
-        $exception = null;
+        return new CreateCoasterHandler();
+    }
 
-        $promise->then(
-            function ($value) use (&$resolved, &$result) {
-                $resolved = true;
-                $result = $value;
-            },
-            function (Throwable $error) use (&$resolved, &$exception) {
-                $resolved = true;
-                $exception = $error;
-            }
-        );
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function removeWagonHandler()
+    {
+        return new RemoveWagonHandler();
+    }
 
-        while (!$resolved) {
-            if (!$loop) {
-                $mess = 'Cannot get loop';
-                log_message('error', $mess);
-                throw new LogicException($mess);
-            }
-            $loop->run();
-        }
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function updateCoasterHandler()
+    {
+        return new UpdateCoasterHandler();
+    }
 
-        if ($exception) {
-            throw $exception; // Throw exception if the promise was rejected
-        }
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function messageBus(): MessageBus
+    {
+        $handlers = [
+            AddWagonCommand::class => [
+                new HandlerDescriptor(self::addWagonHandler(), [])
+            ],
+            CreateCoasterCommand::class => [
+                new HandlerDescriptor(self::createCoasterHandler(), [])
+            ],
+            RemoveWagonCommand::class => [
+                new HandlerDescriptor(self::removeWagonHandler(), [])
+            ],
+            UpdateCoasterCommand::class => [
+                new HandlerDescriptor(self::updateCoasterHandler(), [])
+            ],
+        ];
 
-        return $result;
+        $handlersLocator = new HandlersLocator($handlers);
+
+        $middleware = [
+            new HandleMessageMiddleware($handlersLocator)
+        ];
+
+        return new MessageBus($middleware);
+    }
+
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function coasterValidator()
+    {
+        return new CoasterValidator();
+    }
+
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function wagonValidator()
+    {
+        return new WagonValidator();
+    }
+
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function coasterProblemDetector()
+    {
+        return new CoasterProblemDetector();
+    }
+
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function coasterRepository()
+    {
+        return new CoasterRepository();
+    }
+
+    //could cache instance and have separate factory / just be autoinjected from DI.
+    public static function wagonRepository()
+    {
+        return new WagonRepository();
     }
 }

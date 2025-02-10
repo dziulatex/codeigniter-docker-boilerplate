@@ -6,6 +6,8 @@ use App\DTO\WagonDTO;
 use Config\Services;
 use CodeIgniter\Database\Exceptions\DatabaseException;
 use Clue\React\Redis\RedisClient;
+use Ramsey\Uuid\Uuid;
+use Ramsey\Uuid\UuidInterface;
 use React\Promise\PromiseInterface;
 
 use function React\Promise\all;
@@ -21,12 +23,12 @@ class WagonRepository
         $this->redis = Services::redis();
     }
 
-    private function notifyWagonUpdate(string $coasterId): PromiseInterface
+    private function notifyWagonUpdate(UuidInterface $coasterId): PromiseInterface
     {
         return $this->redis->publish(
             'coaster:updates',
             json_encode([
-                'id' => $coasterId,
+                'id' => $coasterId->toString(),
                 'type' => 'wagon',
                 'timestamp' => date('Y-m-d H:i:s')
             ])
@@ -35,7 +37,7 @@ class WagonRepository
 
     public function save(WagonDTO $wagon): PromiseInterface
     {
-        $key = self::PREFIX . $wagon->getId();
+        $key = self::PREFIX . $wagon->getId()->toString();
         $data = array_map('\strval', $wagon->toArray());
 
         $hmsetData = [];
@@ -47,7 +49,10 @@ class WagonRepository
         return $this->redis->hmset($key, ...$hmsetData)
             ->then(function ($result) use ($wagon) {
                 if ($result === 'OK') {
-                    return $this->redis->sadd("coaster:{$wagon->getCoasterId()}:wagons", $wagon->getId())
+                    return $this->redis->sadd(
+                        "coaster:{$wagon->getCoasterId()->toString()}:wagons",
+                        $wagon->getId()->toString()
+                    )
                         ->then(function () use ($wagon) {
                             return $this->notifyWagonUpdate($wagon->getCoasterId())
                                 ->then(function () use ($wagon) {
@@ -63,9 +68,10 @@ class WagonRepository
             });
     }
 
-    public function findById(string $id): PromiseInterface
+    public function findById(UuidInterface $id): PromiseInterface
     {
-        return $this->redis->hgetall(self::PREFIX . $id)
+        $idString = $id->toString();
+        return $this->redis->hgetall(self::PREFIX . $idString)
             ->then(function ($data) {
                 if (empty($data)) {
                     return null;
@@ -83,17 +89,18 @@ class WagonRepository
             });
     }
 
-    public function delete(string $id): PromiseInterface
+    public function delete(UuidInterface $id): PromiseInterface
     {
+        $idString = $id->toString();
         return $this->findById($id)
-            ->then(function ($wagon) use ($id) {
+            ->then(function ($wagon) use ($idString) {
                 if (!$wagon) {
                     return false;
                 }
 
-                return $this->redis->srem("coaster:{$wagon->getCoasterId()}:wagons", $id)
-                    ->then(function () use ($id, $wagon) {
-                        return $this->redis->del(self::PREFIX . $id)
+                return $this->redis->srem("coaster:{$wagon->getCoasterId()}:wagons", $idString)
+                    ->then(function () use ($idString, $wagon) {
+                        return $this->redis->del(self::PREFIX . $idString)
                             ->then(function ($result) use ($wagon) {
                                 if ($result > 0) {
                                     return $this->notifyWagonUpdate($wagon->getCoasterId())
@@ -111,12 +118,13 @@ class WagonRepository
             });
     }
 
-    public function getWagonsByCoaster(string $coasterId): PromiseInterface
+    public function getWagonsByCoaster(UuidInterface $coasterId): PromiseInterface
     {
-        return $this->redis->smembers("coaster:$coasterId:wagons")
+        $coasterIdString = $coasterId->toString();
+        return $this->redis->smembers("coaster:$coasterIdString:wagons")
             ->then(function ($ids) {
                 $promises = array_map(
-                    fn($id) => $this->findById($id),
+                    fn($id) => $this->findById(Uuid::fromString($id)),
                     $ids
                 );
                 return all($promises)
@@ -130,15 +138,16 @@ class WagonRepository
             });
     }
 
-    public function updateLastRun(string $id): PromiseInterface
+    public function updateLastRun(UuidInterface $id): PromiseInterface
     {
+        $idString = $id->toString();
         return $this->findById($id)
-            ->then(function ($wagon) use ($id) {
+            ->then(function ($wagon) use ($idString) {
                 if (!$wagon) {
                     return false;
                 }
 
-                return $this->redis->hset(self::PREFIX . $id, 'last_run', date('Y-m-d H:i:s'))
+                return $this->redis->hset(self::PREFIX . $idString, 'last_run', date('Y-m-d H:i:s'))
                     ->then(function ($result) use ($wagon) {
                         if ($result !== false) {
                             return $this->notifyWagonUpdate($wagon->getCoasterId())

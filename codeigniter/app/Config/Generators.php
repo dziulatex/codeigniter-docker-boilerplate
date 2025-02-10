@@ -8,7 +8,7 @@ class Generators extends BaseConfig
 {
     /**
      * --------------------------------------------------------------------------
-     * Generator Commands' Views
+     * Generator ConsoleCommand' Views
      * --------------------------------------------------------------------------
      *
      * This array defines the mapping of generator commands to the view files

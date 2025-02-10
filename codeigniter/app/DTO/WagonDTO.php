@@ -3,23 +3,24 @@
 namespace App\DTO;
 
 use Ramsey\Uuid\Uuid;
+use Ramsey\Uuid\UuidInterface;
 
 class WagonDTO
 {
-    private string $id;
-    private string $coasterId;
+    private UuidInterface $id;
+    private UuidInterface $coasterId;
     private int $iloscMiejsc;
     private float $predkoscWagonu;
     private ?string $lastRun;
 
     public function __construct(
-        string $coasterId,
+        UuidInterface $coasterId,
         int $iloscMiejsc,
         float $predkoscWagonu,
         ?string $lastRun = null,
-        ?string $id = null
+        ?UuidInterface $id = null
     ) {
-        $this->id = $id ?? Uuid::uuid4()->toString();
+        $this->id = $id ?? Uuid::uuid4();
         $this->coasterId = $coasterId;
         $this->iloscMiejsc = $iloscMiejsc;
         $this->predkoscWagonu = $predkoscWagonu;
@@ -29,21 +30,20 @@ class WagonDTO
     public function toArray(): array
     {
         return [
-            'id' => $this->id,
-            'coaster_id' => $this->coasterId,
+            'id' => $this->id->toString(),
+            'coaster_id' => $this->coasterId->toString(),
             'ilosc_miejsc' => $this->iloscMiejsc,
             'predkosc_wagonu' => $this->predkoscWagonu,
             'last_run' => $this->lastRun,
         ];
     }
 
-    // Getters
-    public function getId(): string
+    public function getId(): UuidInterface
     {
         return $this->id;
     }
 
-    public function getCoasterId(): string
+    public function getCoasterId(): UuidInterface
     {
         return $this->coasterId;
     }
@@ -66,11 +66,11 @@ class WagonDTO
     public static function fromArray(array $data): self
     {
         return new self(
-            $data['coaster_id'],
+            Uuid::fromString($data['coaster_id']),
             (int)$data['ilosc_miejsc'],
             $data['predkosc_wagonu'],
             $data['last_run'] ?? null,
-            $data['id'] ?? null
+            Uuid::fromString($data['id'])
         );
     }
 }

@@ -2,32 +2,39 @@
 
 namespace App\Controllers\Api;
 
+use App\Exception\CommandFailedException;
+use CodeIgniter\HTTP\ResponseInterface;
 use CodeIgniter\RESTful\ResourceController;
 use CodeIgniter\API\ResponseTrait;
-use App\Repository\CoasterRepository;
-use App\Repository\WagonRepository;
-use App\Validator\CoasterValidator;
-use App\Validator\WagonValidator;
-use App\DTO\CoasterDTO;
-use App\DTO\WagonDTO;
 use Config\Services;
 use Exception;
+use Ramsey\Uuid\Uuid;
+use Symfony\Component\Messenger\MessageBusInterface;
+use App\Command\CreateCoasterCommand;
+use App\Command\UpdateCoasterCommand;
+use App\Command\AddWagonCommand;
+use App\Command\RemoveWagonCommand;
+use App\Validator\CoasterValidator;
+use App\Validator\WagonValidator;
+use App\Exception\CoasterNotFoundException;
+use App\Exception\WagonNotFoundException;
+use App\Exception\WagonDoesNotBelongToCoasterException;
+use Symfony\Component\Messenger\Exception\HandlerFailedException;
+use Symfony\Component\Messenger\Stamp\HandledStamp;
 
-class CoasterController extends ResourceController
+class CoasterController extends AbstractApiController
 {
     use ResponseTrait;
 
-    protected CoasterRepository $coasterRepository;
-    protected WagonRepository $wagonRepository;
+    protected MessageBusInterface $messageBus;
     protected CoasterValidator $coasterValidator;
     protected WagonValidator $wagonValidator;
 
     public function __construct()
     {
-        $this->coasterRepository = new CoasterRepository();
-        $this->wagonRepository = new WagonRepository();
-        $this->coasterValidator = new CoasterValidator();
-        $this->wagonValidator = new WagonValidator();
+        $this->messageBus = Services::messageBus();
+        $this->coasterValidator = Services::coasterValidator();
+        $this->wagonValidator = Services::wagonValidator();
     }
 
     public function create()
@@ -43,7 +50,7 @@ class CoasterController extends ResourceController
         }
 
         try {
-            $coasterDTO = new CoasterDTO(
+            $command = new CreateCoasterCommand(
                 $data['liczba_personelu'],
                 $data['liczba_klientow'],
                 $data['dl_trasy'],
@@ -51,33 +58,39 @@ class CoasterController extends ResourceController
                 $data['godziny_do']
             );
 
-            $promise = $this->coasterRepository->save($coasterDTO);
-            $result = Services::waitForPromise($promise);
-            if (!$result) {
+            $envelope = $this->messageBus->dispatch($command);
+            $handledStamp = $envelope->last(HandledStamp::class);
+            $id = $handledStamp ? $handledStamp->getResult() : null;
+
+            if (empty($id) || !Uuid::isValid($id)) {
                 return $this->respond([
-                    'status' => 400,
-                    'error' => 400,
-                    'messages' => 'Failed to create roller coaster'
-                ], 400);
+                    'status' => 500,
+                    'error' => 500,
+                    'messages' => 'Invalid UUID generated'
+                ], 500);
             }
+
             return $this->respond([
                 'status' => 201,
                 'error' => null,
                 'messages' => 'Roller coaster created successfully',
-                'id' => $coasterDTO->getId()
+                'id' => $id
             ], 201);
         } catch (Exception $e) {
-            log_message('error', 'Failed to create coaster: ' . $e->getMessage());
-            return $this->respond([
-                'status' => 500,
-                'error' => 500,
-                'messages' => 'Internal server error'
-            ], 500);
+            return $this->handleMessengerException($e);
         }
     }
 
     public function update($id = null)
     {
+        if (empty($id) || !Uuid::isValid($id)) {
+            return $this->respond([
+                'status' => 400,
+                'error' => 400,
+                'messages' => 'Invalid coaster ID format'
+            ], 400);
+        }
+
         $data = $this->request->getJSON(true);
 
         if (!$this->coasterValidator->validate($data)) {
@@ -89,37 +102,15 @@ class CoasterController extends ResourceController
         }
 
         try {
-            $existingCoaster = Services::waitForPromise(
-                $this->coasterRepository->findById($id)
-            );
-            if (!$existingCoaster) {
-                return $this->respond([
-                    'status' => 404,
-                    'error' => 404,
-                    'messages' => 'Roller coaster not found'
-                ], 404);
-            }
-
-            $coasterDTO = new CoasterDTO(
+            $command = new UpdateCoasterCommand(
+                Uuid::fromString($id),
                 $data['liczba_personelu'],
                 $data['liczba_klientow'],
-                $existingCoaster->getDlTrasy(),
                 $data['godziny_od'],
-                $data['godziny_do'],
-                $id
+                $data['godziny_do']
             );
 
-            $result = Services::waitForPromise(
-                $this->coasterRepository->update($coasterDTO)
-            );
-
-            if (!$result) {
-                return $this->respond([
-                    'status' => 400,
-                    'error' => 400,
-                    'messages' => 'Failed to update roller coaster'
-                ], 400);
-            }
+            $this->messageBus->dispatch($command);
 
             return $this->respond([
                 'status' => 200,
@@ -127,17 +118,20 @@ class CoasterController extends ResourceController
                 'messages' => 'Roller coaster updated successfully'
             ], 200);
         } catch (Exception $e) {
-            log_message('error', 'Failed to update coaster: ' . $e->getMessage());
-            return $this->respond([
-                'status' => 500,
-                'error' => 500,
-                'messages' => 'Internal server error'
-            ], 500);
+            return $this->handleMessengerException($e);
         }
     }
 
-    public function addWagon($coasterId)
+    public function addWagon($coasterId): ResponseInterface
     {
+        if (empty($coasterId) || !Uuid::isValid($coasterId)) {
+            return $this->respond([
+                'status' => 400,
+                'error' => 400,
+                'messages' => 'Invalid coaster ID format'
+            ], 400);
+        }
+
         $data = $this->request->getJSON(true);
 
         if (!$this->wagonValidator->validate($data)) {
@@ -149,98 +143,59 @@ class CoasterController extends ResourceController
         }
 
         try {
-            $exists = Services::waitForPromise(
-                $this->coasterRepository->exists($coasterId)
-            );
-
-            if (!$exists) {
-                return $this->respond([
-                    'status' => 404,
-                    'error' => 404,
-                    'messages' => 'Roller coaster not found'
-                ], 404);
-            }
-
-            $wagonDTO = new WagonDTO(
-                $coasterId,
+            $command = new AddWagonCommand(
+                Uuid::fromString($coasterId),
                 $data['ilosc_miejsc'],
                 $data['predkosc_wagonu']
             );
 
-            $result = Services::waitForPromise(
-                $this->wagonRepository->save($wagonDTO)
-            );
+            $envelope = $this->messageBus->dispatch($command);
+            $handledStamp = $envelope->last(HandledStamp::class);
+            $id = $handledStamp ? $handledStamp->getResult() : null;
 
-            if (!$result) {
+            if (empty($id) || !Uuid::isValid($id)) {
                 return $this->respond([
-                    'status' => 400,
-                    'error' => 400,
-                    'messages' => 'Failed to add wagon'
-                ], 400);
+                    'status' => 500,
+                    'error' => 500,
+                    'messages' => 'Invalid wagon UUID generated'
+                ], 500);
             }
 
             return $this->respond([
                 'status' => 201,
                 'error' => null,
                 'messages' => 'Wagon added successfully',
-                'id' => $wagonDTO->getId()
+                'id' => $id
             ], 201);
         } catch (Exception $e) {
-            log_message('error', 'Failed to add wagon: ' . $e->getMessage());
-            return $this->respond([
-                'status' => 500,
-                'error' => 500,
-                'messages' => 'Internal server error'
-            ], 500);
+            return $this->handleMessengerException($e);
         }
     }
 
-    public function removeWagon($coasterId, $wagonId)
+    public function removeWagon($coasterId, $wagonId): ResponseInterface
     {
+        if (empty($coasterId) || !Uuid::isValid($coasterId)) {
+            return $this->respond([
+                'status' => 400,
+                'error' => 400,
+                'messages' => 'Invalid coaster ID format'
+            ], 400);
+        }
+
+        if (empty($wagonId) || !Uuid::isValid($wagonId)) {
+            return $this->respond([
+                'status' => 400,
+                'error' => 400,
+                'messages' => 'Invalid wagon ID format'
+            ], 400);
+        }
+
         try {
-            $exists = Services::waitForPromise(
-                $this->coasterRepository->exists($coasterId)
+            $command = new RemoveWagonCommand(
+                Uuid::fromString($coasterId),
+                Uuid::fromString($wagonId)
             );
-
-            if (!$exists) {
-                return $this->respond([
-                    'status' => 404,
-                    'error' => 404,
-                    'messages' => 'Roller coaster not found'
-                ], 404);
-            }
-
-            $wagon = Services::waitForPromise(
-                $this->wagonRepository->findById($wagonId)
-            );
-
-            if (!$wagon) {
-                return $this->respond([
-                    'status' => 404,
-                    'error' => 404,
-                    'messages' => 'Wagon not found'
-                ], 404);
-            }
-
-            if ($wagon->getCoasterId() !== $coasterId) {
-                return $this->respond([
-                    'status' => 400,
-                    'error' => 400,
-                    'messages' => 'Wagon does not belong to this roller coaster'
-                ], 400);
-            }
-
-            $result = Services::waitForPromise(
-                $this->wagonRepository->delete($wagonId)
-            );
-
-            if (!$result) {
-                return $this->respond([
-                    'status' => 400,
-                    'error' => 400,
-                    'messages' => 'Failed to remove wagon'
-                ], 400);
-            }
+            $this->messageBus->dispatch($command);
 
             return $this->respond([
                 'status' => 200,
@@ -248,12 +203,7 @@ class CoasterController extends ResourceController
                 'messages' => 'Wagon removed successfully'
             ], 200);
         } catch (Exception $e) {
-            log_message('error', 'Failed to remove wagon: ' . $e->getMessage());
-            return $this->respond([
-                'status' => 500,
-                'error' => 500,
-                'messages' => 'Internal server error'
-            ], 500);
+            return $this->handleMessengerException($e);
         }
     }
 }

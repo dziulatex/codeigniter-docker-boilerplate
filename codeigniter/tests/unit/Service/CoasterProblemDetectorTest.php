@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Service;
 
+use Config\Services;
 use PHPUnit\Framework\TestCase;
 use App\Service\CoasterProblemDetector;
 use App\DTO\CoasterDTO;
@@ -12,7 +13,7 @@ class CoasterProblemDetectorTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->detector = new CoasterProblemDetector();
+        $this->detector = Services::coasterProblemDetector();
     }
 
     public function testOutsideOperatingHoursReturnsNoProblems()
@@ -69,7 +70,6 @@ class CoasterProblemDetectorTest extends TestCase
     {
         $coaster = new CoasterDTO(4, 20, 900, '06:00', '22:00'); // Operating 6 AM - 10 PM
         $status = $this->detector->getOperationalStatus($coaster);
-
         static::assertEquals(3, $status['expected_wagons']); // 900m → 3 wagons
         static::assertEquals(6, $status['required_personnel']); // 3 wagons → 6 staff
         static::assertTrue($status['is_operating']); // Should be operating now

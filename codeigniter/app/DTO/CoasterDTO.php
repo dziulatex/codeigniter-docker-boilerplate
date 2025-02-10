@@ -3,10 +3,11 @@
 namespace App\DTO;
 
 use Ramsey\Uuid\Uuid;
+use Ramsey\Uuid\UuidInterface;
 
 class CoasterDTO
 {
-    private string $id;
+    private UuidInterface $id;
     private int $liczbaPersonelu;
     private int $liczbaKlientow;
     private float $dlTrasy;
@@ -19,9 +20,9 @@ class CoasterDTO
         float $dlTrasy,
         string $godzinyOd,
         string $godzinyDo,
-        ?string $id = null
+        ?UuidInterface $id = null
     ) {
-        $this->id = $id ?? Uuid::uuid4()->toString();
+        $this->id = $id ?? Uuid::uuid4();
         $this->liczbaPersonelu = $liczbaPersonelu;
         $this->liczbaKlientow = $liczbaKlientow;
         $this->dlTrasy = $dlTrasy;
@@ -32,7 +33,7 @@ class CoasterDTO
     public function toArray(): array
     {
         return [
-            'id' => $this->id,
+            'id' => $this->id->toString(),
             'liczba_personelu' => $this->liczbaPersonelu,
             'liczba_klientow' => $this->liczbaKlientow,
             'dl_trasy' => $this->dlTrasy,
@@ -41,8 +42,7 @@ class CoasterDTO
         ];
     }
 
-    // Getters
-    public function getId(): string
+    public function getId(): UuidInterface
     {
         return $this->id;
     }
@@ -80,7 +80,7 @@ class CoasterDTO
             $data['dl_trasy'],
             $data['godziny_od'],
             $data['godziny_do'],
-            $data['id'] ?? null
+            Uuid::fromString($data['id'])
         );
     }
 }

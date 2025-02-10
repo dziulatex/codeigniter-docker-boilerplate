@@ -132,10 +132,10 @@ class ConsoleMonitor extends BaseCommand
                                     $operationalStatus = $this->problemDetector->getOperationalStatus($coaster);
                                     $problems = $this->problemDetector->detectProblems($coaster, $wagons);
                                     if ($problems) {
-                                        $this->logProblem($coaster->getId(), $problems);
+                                        $this->logProblem($coaster->getId()->toString(), $problems);
                                     }
                                     return [
-                                        'id' => $coaster->getId(),
+                                        'id' => $coaster->getId()->toString(),
                                         'operating_hours' => "{$coaster->getGodzinyOd()} - {$coaster->getGodzinyDo()}",
                                         'wagons' => [
                                             'current' => count($wagons),

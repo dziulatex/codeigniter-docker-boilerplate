@@ -6,6 +6,7 @@ use App\DTO\CoasterDTO;
 use Clue\React\Redis\RedisClient;
 use Config\Services;
 use CodeIgniter\Database\Exceptions\DatabaseException;
+use Ramsey\Uuid\UuidInterface;
 use React\Promise\PromiseInterface;
 
 use function count;
@@ -20,12 +21,12 @@ class CoasterRepository
         $this->redis = Services::redis();
     }
 
-    private function notifyUpdate(string $coasterId): PromiseInterface
+    private function notifyUpdate(UuidInterface $coasterId): PromiseInterface
     {
         return $this->redis->publish(
             'coaster:updates',
             json_encode([
-                'id' => $coasterId,
+                'id' => $coasterId->toString(),
                 'type' => 'coaster',
                 'timestamp' => date('Y-m-d H:i:s')
             ])
@@ -36,7 +37,6 @@ class CoasterRepository
     {
         $key = self::PREFIX . $coaster->getId();
         $data = array_map('\strval', $coaster->toArray());
-
         $hmsetData = [];
         foreach ($data as $field => $value) {
             $hmsetData[] = $field;
@@ -46,7 +46,7 @@ class CoasterRepository
         return $this->redis->hmset($key, ...$hmsetData)
             ->then(function ($result) use ($coaster) {
                 if ($result === 'OK') {
-                    return $this->redis->sadd('coasters', $coaster->getId())
+                    return $this->redis->sadd('coasters', $coaster->getId()->toString())
                         ->then(function () use ($coaster) {
                             return $this->notifyUpdate($coaster->getId())
                                 ->then(function () use ($coaster) {
