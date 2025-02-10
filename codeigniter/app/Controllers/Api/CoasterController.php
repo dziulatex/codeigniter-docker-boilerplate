@@ -57,7 +57,8 @@ class CoasterController extends AbstractApiController
                 $data['godziny_od'],
                 $data['godziny_do']
             );
-
+            //could aswell introduce command new attribute, id which would have setter and the handler would set it at the end
+            //but i find that method there less ugly and less magic as we only call one command in a row not multiple.
             $envelope = $this->messageBus->dispatch($command);
             $handledStamp = $envelope->last(HandledStamp::class);
             $id = $handledStamp ? $handledStamp->getResult() : null;
@@ -148,7 +149,8 @@ class CoasterController extends AbstractApiController
                 $data['ilosc_miejsc'],
                 $data['predkosc_wagonu']
             );
-
+            //could aswell introduce command new attribute, id which would have setter and the handler would set it at the end
+            //but i find that method there less ugly and less magic as we only call one command in a row not multiple.
             $envelope = $this->messageBus->dispatch($command);
             $handledStamp = $envelope->last(HandledStamp::class);
             $id = $handledStamp ? $handledStamp->getResult() : null;
